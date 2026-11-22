@@ -36,6 +36,7 @@ on:
           - plan
           - apply
           - destroy
+          - benchmark
 
 permissions:
   contents: read
@@ -122,6 +123,7 @@ jobs:
 
     env:
       DEPLOY_ENV: ${{ inputs.environment || 'test' }}
+      OPERATION: ${{ inputs.action || 'plan' }}
       TF_DATA_DIR: ${{ github.workspace }}/infrastructure/.terraform/${{ inputs.environment || 'test' }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -155,21 +157,26 @@ jobs:
 
       - name: Terraform plan
         if: inputs.action != 'destroy'
-        run: terraform plan -var-file="environments/${DEPLOY_ENV}.tfvars" -input=false -lock-timeout=5m -no-color -out=plan.tfplan
+        run: |
+          extra_args=()
+          if [[ "$OPERATION" == "benchmark" ]]; then
+            extra_args+=(-detailed-exitcode)
+          fi
+          terraform plan -var-file="environments/${DEPLOY_ENV}.tfvars" -input=false -lock-timeout=5m -no-color -out=plan.tfplan "${extra_args[@]}"
 
       - name: Terraform apply
         if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
         run: terraform apply -input=false -lock-timeout=5m -no-color plan.tfplan
 
       - name: Install Go for Terratest
-        if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
+        if: github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'benchmark')
         uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: "1.27.4"
           cache-dependency-path: test/go.sum
 
-      - name: Run post-apply Terratest
-        if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
+      - name: Run Terratest
+        if: github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'benchmark')
         working-directory: test
         run: go test -v -count=1 -timeout 10m ./...
 
