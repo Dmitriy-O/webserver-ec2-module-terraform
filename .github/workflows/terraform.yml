@@ -1,15 +1,23 @@
-name: Terraform CI
+name: Week 12 Terraform
 
 on:
   push:
     branches:
       - main
-      - "week11-*"
+      - "week12-*"
   pull_request:
     branches:
       - main
   workflow_dispatch:
     inputs:
+      environment:
+        description: Target environment
+        required: true
+        default: test
+        type: choice
+        options:
+          - test
+          - production
       action:
         description: Terraform action
         required: true
@@ -88,11 +96,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
 
+    environment: ${{ inputs.environment || 'test' }}
+
     concurrency:
-      group: week11-webserver-state
+      group: week12-webserver-${{ inputs.environment || 'test' }}
       cancel-in-progress: false
 
     env:
+      DEPLOY_ENV: ${{ inputs.environment || 'test' }}
+      TF_DATA_DIR: ${{ github.workspace }}/infrastructure/.terraform/${{ inputs.environment || 'test' }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
@@ -114,15 +126,15 @@ jobs:
           terraform_wrapper: false
 
       - name: Initialize S3 backend
-        run: terraform init -input=false -lockfile=readonly
+        run: terraform init -reconfigure -input=false -lockfile=readonly -backend-config="environments/${DEPLOY_ENV}.s3.tfbackend"
 
       - name: Terraform plan
         if: inputs.action != 'destroy'
-        run: terraform plan -input=false -no-color -out=plan.tfplan
+        run: terraform plan -var-file="environments/${DEPLOY_ENV}.tfvars" -input=false -lock-timeout=5m -no-color -out=plan.tfplan
 
       - name: Terraform apply
         if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
-        run: terraform apply -input=false -no-color plan.tfplan
+        run: terraform apply -input=false -lock-timeout=5m -no-color plan.tfplan
 
       - name: Install Go for Terratest
         if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
@@ -138,4 +150,4 @@ jobs:
 
       - name: Terraform destroy
         if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
-        run: terraform destroy -auto-approve -input=false -no-color
+        run: terraform destroy -var-file="environments/${DEPLOY_ENV}.tfvars" -auto-approve -input=false -lock-timeout=5m -no-color

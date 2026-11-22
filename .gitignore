@@ -22,3 +22,7 @@ crash.*.log
 
 # macOS
 .DS_Store
+
+# Version-controlled environment configuration without secrets
+!/infrastructure/environments/test.tfvars
+!/infrastructure/environments/production.tfvars
