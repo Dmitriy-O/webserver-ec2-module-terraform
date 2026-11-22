@@ -38,8 +38,19 @@ Separate TF_DATA_DIR directories keep local backend settings independent.
 
 ## CI verification
 
-Record the successful apply and Terratest run URLs for both environments
-after execution. Also record repeat plans confirming no unexpected changes.
+| Operation | Result | Run |
+|---|---|---|
+| test apply | 14 resources created; all three Terratest checks passed | [45066034858](https://github.com/Dmitriy-O/webserver-ec2-module-terraform/actions/runs/45066034858) |
+| test destroy | 14 resources deleted | [45067773576](https://github.com/Dmitriy-O/webserver-ec2-module-terraform/actions/runs/45067773576) |
+| production apply | 13 remaining resources created; all three Terratest checks passed | [45067962325](https://github.com/Dmitriy-O/webserver-ec2-module-terraform/actions/runs/45067962325) |
+
+The initial production apply reached the regional VPC quota after creating
+the SSH key pair. The test environment was destroyed through the pipeline
+to release a quota slot. A fresh production apply reused the existing key
+pair from state and completed successfully.
+
+Both environments were verified sequentially. Simultaneous operation and
+post-deployment no-change plans have not been demonstrated in these runs.
 
 The current Terratest checks infrastructure: VPCs, subnets, instance
 placement and database network isolation. It does not verify MariaDB

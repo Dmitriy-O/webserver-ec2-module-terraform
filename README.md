@@ -1,24 +1,10 @@
-# How to
+# Automated environment provisioning
 
-![infra instance with multiple network](./img/03-multiple-network.png "infra instance with multiple network")
+This project provisions test and production environments through GitHub
+Actions and Terraform. Each configured environment contains one VPC,
+two subnets, one HTTP EC2 instance and one DB EC2 instance.
 
-### Create stack
-
-```
-terraform apply
-```
-
-This script will create:
--   1 vpc
--   2 networks
--   2 instances http
--   3 instances db
-
-### Delete stack
-
-```
-terraform destroy
-```
+See [the Task 1 report](docs/week12-task1.md) for verified runs and quota recovery.
 
 ## Week 12: multiple environments
 
