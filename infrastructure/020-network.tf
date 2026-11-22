@@ -11,11 +11,14 @@ resource "aws_vpc" "terraform" {
 
 # http subnet configuration
 resource "aws_subnet" "http" {
-  vpc_id     = aws_vpc.terraform.id
-  cidr_block = var.network_http["cidr"]
+  vpc_id            = aws_vpc.terraform.id
+  cidr_block        = var.network_http["cidr"]
+  availability_zone = "us-east-1a"
+
   tags = {
     Name = "subnet-http"
   }
+
   depends_on = [aws_internet_gateway.gw]
 }
 
@@ -36,4 +39,3 @@ resource "aws_internet_gateway" "gw" {
     Name = "internet-gateway"
   }
 }
-
