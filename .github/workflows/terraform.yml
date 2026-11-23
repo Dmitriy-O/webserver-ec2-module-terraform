@@ -19,6 +19,7 @@ on:
         options:
           - github-hosted
           - self-hosted
+          - autoscaling
       environment:
         description: Target environment
         required: true
@@ -37,6 +38,14 @@ on:
           - apply
           - destroy
           - benchmark
+      parallel_jobs:
+        description: Number of ephemeral CI workers
+        required: true
+        default: "1"
+        type: choice
+        options:
+          - "1"
+          - "2"
 
 permissions:
   contents: read
@@ -49,6 +58,7 @@ env:
 jobs:
   checks:
     name: Terraform checks
+    if: inputs.runner != 'autoscaling'
     runs-on: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.runner == 'self-hosted' && '["self-hosted","linux","x64","week12"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 15
 
@@ -111,7 +121,7 @@ jobs:
   terraform:
     name: Terraform plan or manual operation
     needs: checks
-    if: github.repository == 'Dmitriy-O/webserver-ec2-module-terraform' && github.event_name != 'pull_request'
+    if: github.repository == 'Dmitriy-O/webserver-ec2-module-terraform' && github.event_name != 'pull_request' && inputs.runner != 'autoscaling'
     runs-on: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.runner == 'self-hosted' && '["self-hosted","linux","x64","week12"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 45
 
@@ -183,3 +193,13 @@ jobs:
       - name: Terraform destroy
         if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
         run: terraform destroy -var-file="environments/${DEPLOY_ENV}.tfvars" -auto-approve -input=false -lock-timeout=5m -no-color
+
+  autoscaling:
+    name: Autoscaling runner pool
+    if: github.repository == 'Dmitriy-O/webserver-ec2-module-terraform' && github.event_name == 'workflow_dispatch' && inputs.runner == 'autoscaling'
+    uses: ./.github/workflows/autoscaling-pool.yml
+    with:
+      environment: ${{ inputs.environment }}
+      operation: ${{ inputs.action }}
+      count: ${{ fromJSON(inputs.parallel_jobs || '1') }}
+    secrets: inherit
