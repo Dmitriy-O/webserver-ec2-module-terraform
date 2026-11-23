@@ -24,8 +24,9 @@ resource "aws_subnet" "http" {
 
 # db subnet configuration
 resource "aws_subnet" "db" {
-  vpc_id     = aws_vpc.terraform.id
-  cidr_block = var.network_db["cidr"]
+  vpc_id            = aws_vpc.terraform.id
+  cidr_block        = var.network_db["cidr"]
+  availability_zone = "us-east-1a"
   tags = {
     Name = "subnet-db"
   }
