@@ -74,3 +74,14 @@ Run the workflow manually with action=destroy and the selected environment.
 Repeat for the other environment when it is no longer needed.
 
 Keep the backend bucket while any managed infrastructure remains.
+
+## Week 12: self-hosted runner
+
+Manual workflow executions support GitHub-hosted and EC2 self-hosted
+runners. Select the project branch, runner, environment and operation.
+
+The benchmark operation requires an existing environment with a
+no-change plan, then runs Terratest without applying infrastructure changes.
+
+See [the Task 2 report](docs/week12-task2.md) for installation,
+troubleshooting, verified benchmark results and cost analysis.
