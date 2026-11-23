@@ -85,3 +85,14 @@ no-change plan, then runs Terratest without applying infrastructure changes.
 
 See [the Task 2 report](docs/week12-task2.md) for installation,
 troubleshooting, verified benchmark results and cost analysis.
+
+## Week 12: autoscaling runners
+
+Select runner=autoscaling, environment=production, action=benchmark
+and parallel_jobs=1 or 2 in the manual Terraform workflow.
+
+The workflow provisions ephemeral EC2 workers, runs CI and scales
+the shared pool back to zero.
+
+See [the Task 3 report](docs/week12-task3.md) for setup, verified
+executions, startup measurements and limitations.
