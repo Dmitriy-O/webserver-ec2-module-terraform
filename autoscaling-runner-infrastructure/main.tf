@@ -133,7 +133,7 @@ resource "aws_autoscaling_group" "runner" {
   }
 
   lifecycle {
-    ignore_changes = [desired_capacity]
+    ignore_changes = [desired_capacity, launch_template]
 
     precondition {
       condition     = data.aws_subnet.selected.vpc_id == local.vpc_id
