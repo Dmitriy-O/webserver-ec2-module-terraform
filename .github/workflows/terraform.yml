@@ -1,4 +1,5 @@
 name: Week 12 Terraform
+
 run-name: "${{ github.event_name }} | ${{ inputs.runner || 'github-hosted' }} | ${{ inputs.environment || 'test' }} | ${{ inputs.action || 'plan' }}"
 
 on:
@@ -6,9 +7,11 @@ on:
     branches:
       - main
       - "week12-*"
+
   pull_request:
     branches:
       - main
+
   workflow_dispatch:
     inputs:
       runner:
@@ -20,6 +23,7 @@ on:
           - github-hosted
           - self-hosted
           - autoscaling
+
       environment:
         description: Target environment
         required: true
@@ -28,6 +32,7 @@ on:
         options:
           - test
           - production
+
       action:
         description: Terraform action
         required: true
@@ -38,6 +43,7 @@ on:
           - apply
           - destroy
           - benchmark
+
       parallel_jobs:
         description: Number of ephemeral CI workers
         required: true
@@ -59,7 +65,9 @@ jobs:
   checks:
     name: Terraform checks
     if: inputs.runner != 'autoscaling'
+
     runs-on: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.runner == 'self-hosted' && '["self-hosted","linux","x64","week12"]' || '["ubuntu-24.04"]') }}
+
     timeout-minutes: 15
 
     defaults:
@@ -121,8 +129,11 @@ jobs:
   terraform:
     name: Terraform plan or manual operation
     needs: checks
+
     if: github.repository == 'Dmitriy-O/webserver-ec2-module-terraform' && github.event_name != 'pull_request' && inputs.runner != 'autoscaling'
+
     runs-on: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.runner == 'self-hosted' && '["self-hosted","linux","x64","week12"]' || '["ubuntu-24.04"]') }}
+
     timeout-minutes: 45
 
     environment: ${{ inputs.environment || 'test' }}
@@ -163,20 +174,38 @@ jobs:
           terraform_wrapper: false
 
       - name: Initialize S3 backend
-        run: terraform init -reconfigure -input=false -lockfile=readonly -backend-config="environments/${DEPLOY_ENV}.s3.tfbackend"
+        run: |
+          terraform init \
+            -reconfigure \
+            -input=false \
+            -lockfile=readonly \
+            -backend-config="environments/${DEPLOY_ENV}.s3.tfbackend"
 
       - name: Terraform plan
         if: inputs.action != 'destroy'
         run: |
           extra_args=()
+
           if [[ "$OPERATION" == "benchmark" ]]; then
             extra_args+=(-detailed-exitcode)
           fi
-          terraform plan -var-file="environments/${DEPLOY_ENV}.tfvars" -input=false -lock-timeout=5m -no-color -out=plan.tfplan "${extra_args[@]}"
+
+          terraform plan \
+            -var-file="environments/${DEPLOY_ENV}.tfvars" \
+            -input=false \
+            -lock-timeout=5m \
+            -no-color \
+            -out=plan.tfplan \
+            "${extra_args[@]}"
 
       - name: Terraform apply
         if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
-        run: terraform apply -input=false -lock-timeout=5m -no-color plan.tfplan
+        run: |
+          terraform apply \
+            -input=false \
+            -lock-timeout=5m \
+            -no-color \
+            plan.tfplan
 
       - name: Install Go for Terratest
         if: github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'benchmark')
@@ -190,16 +219,111 @@ jobs:
         working-directory: test
         run: go test -v -count=1 -timeout 10m ./...
 
-      - name: Terraform destroy
+      - name: Create destroy plan for review
         if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
-        run: terraform destroy -var-file="environments/${DEPLOY_ENV}.tfvars" -auto-approve -input=false -lock-timeout=5m -no-color
+        run: |
+          terraform plan \
+            -destroy \
+            -var-file="environments/${DEPLOY_ENV}.tfvars" \
+            -input=false \
+            -lock-timeout=5m \
+            -no-color \
+            -out=destroy.tfplan
+
+          terraform show -no-color destroy.tfplan > destroy-plan.txt
+
+          {
+            printf '### Destroy plan: %s\n\n' "$DEPLOY_ENV"
+            printf 'Commit: `%s`\n\n' "$GITHUB_SHA"
+            printf 'Review this plan before approving the destroy job.\n\n'
+            printf '```text\n'
+            cat destroy-plan.txt
+            printf '\n```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload destroy plan
+        if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: destroy-plan-${{ inputs.environment }}-${{ github.run_attempt }}
+          path: |
+            infrastructure/destroy.tfplan
+            infrastructure/destroy-plan.txt
+          if-no-files-found: error
+          retention-days: 1
+
+  destroy:
+    name: Approve and destroy ${{ inputs.environment }}
+    needs: terraform
+
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy' && inputs.runner != 'autoscaling'
+
+    runs-on: ${{ fromJSON(inputs.runner == 'self-hosted' && '["self-hosted","linux","x64","week12"]' || '["ubuntu-24.04"]') }}
+
+    timeout-minutes: 45
+
+    # Required reviewers must be enabled in this GitHub Environment.
+    environment: terraform-destroy
+
+    concurrency:
+      group: week12-webserver-${{ inputs.environment }}
+      cancel-in-progress: false
+
+    env:
+      DEPLOY_ENV: ${{ inputs.environment }}
+      TF_DATA_DIR: ${{ github.workspace }}/infrastructure/.terraform/${{ inputs.environment }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: infrastructure
+
+    steps:
+      - name: Checkout reviewed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.16.2"
+          terraform_wrapper: false
+
+      - name: Download reviewed destroy plan
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: destroy-plan-${{ inputs.environment }}-${{ github.run_attempt }}
+          path: infrastructure
+
+      - name: Initialize S3 backend
+        run: |
+          terraform init \
+            -reconfigure \
+            -input=false \
+            -lockfile=readonly \
+            -backend-config="environments/${DEPLOY_ENV}.s3.tfbackend"
+
+      - name: Apply approved destroy plan
+        run: |
+          terraform apply \
+            -input=false \
+            -lock-timeout=5m \
+            -no-color \
+            destroy.tfplan
 
   autoscaling:
     name: Autoscaling runner pool
+
     if: github.repository == 'Dmitriy-O/webserver-ec2-module-terraform' && github.event_name == 'workflow_dispatch' && inputs.runner == 'autoscaling'
+
     uses: ./.github/workflows/autoscaling-pool.yml
+
     with:
       environment: ${{ inputs.environment }}
       operation: ${{ inputs.action }}
       count: ${{ fromJSON(inputs.parallel_jobs || '1') }}
+
     secrets: inherit
