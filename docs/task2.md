@@ -30,3 +30,21 @@ https://github.com/Dmitriy-O/webserver-ec2-module-terraform/actions/runs/4497930
 
 Manual destroy successfully removed all 18 managed resources:
 https://github.com/Dmitriy-O/webserver-ec2-module-terraform/actions/runs/44979694299
+
+## Review corrections
+
+Database instances use a private route table with outbound internet
+access through a NAT Gateway in the public subnet. They retain private
+addresses, and database ingress remains restricted to the web security group.
+
+DB instances depend on the completed network route. Updated user data
+recreates the instances so that installation runs again.
+
+Bootstrap stops on errors, installs MariaDB, starts the service and
+executes SELECT 1. TestDatabaseBootstrap polls EC2 console output for
+the success marker for up to eight minutes and fails on initialization
+errors or timeout.
+
+Destroy now generates and uploads a saved destruction plan first.
+A separate job applies that plan through the terraform-destroy
+environment, which must have Required reviewers configured in GitHub.

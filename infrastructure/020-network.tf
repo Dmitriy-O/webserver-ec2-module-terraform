@@ -24,11 +24,14 @@ resource "aws_subnet" "http" {
 
 # db subnet configuration
 resource "aws_subnet" "db" {
-  vpc_id     = aws_vpc.terraform.id
-  cidr_block = var.network_db["cidr"]
+  vpc_id            = aws_vpc.terraform.id
+  cidr_block        = var.network_db["cidr"]
+  availability_zone = aws_subnet.http.availability_zone
+
   tags = {
     Name = "subnet-db"
   }
+
   depends_on = [aws_internet_gateway.gw]
 }
 

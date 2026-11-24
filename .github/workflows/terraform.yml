@@ -136,6 +136,63 @@ jobs:
         working-directory: test
         run: go test -v -count=1 -timeout 10m ./...
 
-      - name: Terraform destroy
+      - name: Create destroy plan
         if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
-        run: terraform destroy -auto-approve -input=false -no-color
+        run: terraform plan -destroy -input=false -no-color -out=destroy.tfplan
+
+      - name: Upload destroy plan
+        if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: destroy-plan-${{ github.run_id }}
+          path: infrastructure/destroy.tfplan
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+  destroy:
+    name: Destroy after approval
+    needs: terraform
+    if: github.repository == 'Dmitriy-O/webserver-ec2-module-terraform' && github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    environment:
+      name: terraform-destroy
+
+    concurrency:
+      group: week11-webserver-state
+      cancel-in-progress: false
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: infrastructure
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.16.2"
+          terraform_wrapper: false
+
+      - name: Download approved destroy plan
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: destroy-plan-${{ github.run_id }}
+          path: infrastructure
+
+      - name: Initialize S3 backend
+        run: terraform init -input=false -lockfile=readonly
+
+      - name: Apply approved destroy plan
+        run: terraform apply -input=false -no-color destroy.tfplan
