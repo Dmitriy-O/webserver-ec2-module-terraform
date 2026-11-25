@@ -1,0 +1,57 @@
+#!/bin/bash
+set -Eeuo pipefail
+
+exec > >(tee -a /var/log/week13-bootstrap.log) 2>&1
+trap 'echo "Bootstrap failed on line $LINENO" >&2' ERR
+
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update -o Acquire::Retries=5
+apt-get install -y curl ca-certificates
+
+install -d -m 0755 /etc/rancher/k3s
+
+cat > /etc/rancher/k3s/config.yaml <<'YAML'
+node-name: week13-monitoring
+write-kubeconfig-mode: "0600"
+tls-san:
+  - "${public_ip}"
+disable:
+  - traefik
+  - servicelb
+YAML
+
+curl \
+  --fail \
+  --silent \
+  --show-error \
+  --location \
+  --retry 5 \
+  https://get.k3s.io \
+  -o /root/install-k3s.sh
+
+INSTALL_K3S_VERSION='${k3s_version}' \
+  sh /root/install-k3s.sh
+
+for attempt in $(seq 1 120); do
+  if /usr/local/bin/k3s kubectl get \
+    --raw=/readyz >/dev/null 2>&1; then
+
+    /usr/local/bin/k3s kubectl wait \
+      --for=condition=Ready \
+      nodes \
+      --all \
+      --timeout=180s
+
+    /usr/local/bin/k3s --version
+    /usr/local/bin/k3s kubectl get nodes -o wide
+
+    echo "Week13 Kubernetes bootstrap completed"
+    exit 0
+  fi
+
+  sleep 5
+done
+
+echo "Kubernetes API did not become ready; inspect journalctl -u k3s" >&2
+exit 1

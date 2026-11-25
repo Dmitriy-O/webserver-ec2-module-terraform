@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb-exporter
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb-exporter
+  template:
+    metadata:
+      labels:
+        app: mongodb-exporter
+    spec:
+      containers:
+        - name: exporter
+          image: percona/mongodb_exporter:0.53
+          args:
+            - --mongodb.uri=mongodb://mongodb.demo.svc.cluster.local:27017/admin?authSource=admin
+            - --collector.diagnosticdata
+            - --compatible-mode
+          env:
+            - name: MONGODB_USER
+              value: exporter
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-credentials
+                  key: monitor-password
+          ports:
+            - name: metrics
+              containerPort: 9216
+          readinessProbe:
+            tcpSocket:
+              port: metrics
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 300m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-exporter
+  namespace: demo
+  labels:
+    app: mongodb-exporter
+spec:
+  selector:
+    app: mongodb-exporter
+  ports:
+    - name: metrics
+      port: 9216
+      targetPort: metrics

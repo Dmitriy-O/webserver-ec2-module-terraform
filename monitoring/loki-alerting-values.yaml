@@ -1,0 +1,35 @@
+ruler:
+  enabled: true
+  replicas: 0
+
+loki:
+  rulerConfig:
+    storage:
+      type: local
+      local:
+        directory: /etc/loki/alert-rules
+
+    rule_path: /var/loki/rule-evaluation
+    poll_interval: 15s
+    enable_api: true
+    enable_sharding: false
+    enable_alertmanager_v2: true
+    alertmanager_url: http://week13-monitoring-alertmanager.monitoring.svc.cluster.local:9093
+
+    ring:
+      kvstore:
+        store: inmemory
+
+singleBinary:
+  extraVolumes:
+    - name: alert-rules
+      configMap:
+        name: week13-loki-alert-rules
+        items:
+          - key: rules.yaml
+            path: fake/task2.yaml
+
+  extraVolumeMounts:
+    - name: alert-rules
+      mountPath: /etc/loki/alert-rules
+      readOnly: true

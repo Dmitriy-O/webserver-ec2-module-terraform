@@ -1,0 +1,78 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: http-demo-traffic
+  namespace: demo
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 360
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: http-traffic
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: traffic
+          image: python:3.12-alpine
+          command:
+            - python
+            - -u
+            - -c
+            - |
+              import time
+              from urllib.request import urlopen
+              from urllib.error import HTTPError
+
+              base = "http://http-demo.demo.svc.cluster.local:8080"
+
+              phases = [
+                  ("baseline", 10, False),
+                  ("failure", 60, True),
+                  ("recovery", 150, False),
+              ]
+
+              for phase, seconds, failure in phases:
+                  counts = {}
+                  print(f"Starting phase: {phase}", flush=True)
+
+                  for i in range(seconds):
+                      path = "/fail" if failure and i % 5 != 0 else "/ok"
+
+                      try:
+                          with urlopen(base + path, timeout=5) as response:
+                              status = response.status
+                              response.read()
+                      except HTTPError as error:
+                          status = error.code
+                          error.close()
+
+                      expected = 500 if path == "/fail" else 200
+                      if status != expected:
+                          raise RuntimeError(
+                              f"Unexpected response: {status}, expected {expected}"
+                          )
+
+                      counts[status] = counts.get(status, 0) + 1
+
+                      if (i + 1) % 10 == 0:
+                          print(
+                              f"{phase}: {i + 1}/{seconds} requests, "
+                              f"responses={counts}",
+                              flush=True
+                          )
+
+                      time.sleep(1)
+
+                  print(f"Completed {phase}: {counts}", flush=True)
+
+              print("Verification traffic completed.", flush=True)
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi

@@ -1,0 +1,71 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: week13-infrastructure-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+  annotations:
+    source: https://samber.github.io/awesome-prometheus-alerts/rules/orchestrators/kubernetes/
+    adaptation: OOM detection uses increase() to support recently created pods.
+spec:
+  groups:
+    - name: week13.infrastructure
+      interval: 30s
+      rules:
+        - alert: Week13NodeNotReady
+          expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+          for: 10m
+          labels:
+            severity: critical
+            project: week13
+          annotations:
+            summary: Kubernetes node is not Ready
+            description: >-
+              Node {{ $labels.node }} has been unready for more than 10 minutes.
+              Check node conditions, kubelet, and network connectivity.
+
+        - alert: Week13NodeMemoryPressure
+          expr: kube_node_status_condition{condition="MemoryPressure",status="true"} == 1
+          for: 2m
+          labels:
+            severity: critical
+            project: week13
+          annotations:
+            summary: Kubernetes node is under memory pressure
+            description: >-
+              Node {{ $labels.node }} has reported MemoryPressure for 2 minutes.
+              Check available memory and workload consumption.
+
+        - alert: Week13NodeDiskPressure
+          expr: kube_node_status_condition{condition="DiskPressure",status="true"} == 1
+          for: 2m
+          labels:
+            severity: critical
+            project: week13
+          annotations:
+            summary: Kubernetes node is under disk pressure
+            description: >-
+              Node {{ $labels.node }} has reported DiskPressure for 2 minutes.
+              Check disk space, inodes, container images, and logs.
+
+        - alert: Week13ContainerOOMKilled
+          expr: |
+            (
+              increase(kube_pod_container_status_restarts_total[10m]) > 0
+            )
+            and on (namespace, pod, container)
+            (
+              kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+            )
+          for: 0m
+          labels:
+            severity: warning
+            project: week13
+          annotations:
+            summary: Container restarted after an OOM kill
+            description: >-
+              Container {{ $labels.container }} in pod
+              {{ $labels.namespace }}/{{ $labels.pod }}
+              restarted within the last 10 minutes and its last termination
+              reason is OOMKilled. Check memory usage and limits.

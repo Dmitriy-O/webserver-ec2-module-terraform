@@ -26,3 +26,13 @@ crash.*.log
 # Version-controlled environment configuration without secrets
 !/infrastructure/environments/test.tfvars
 !/infrastructure/environments/production.tfvars
+
+# Week 13 local files
+monitoring-infrastructure/.terraform/
+monitoring-infrastructure/*.tfstate
+monitoring-infrastructure/*.tfstate.*
+monitoring-infrastructure/*.tfplan
+monitoring-infrastructure/*.tfvars
+monitoring-infrastructure/*.tfvars.json
+!monitoring-infrastructure/.terraform.lock.hcl
+monitoring/__pycache__/

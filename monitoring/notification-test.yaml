@@ -1,0 +1,23 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: week13-notification-test
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: week13.notification-test
+      interval: 15s
+      rules:
+        - alert: Week13EmailSmokeTest
+          expr: vector(1)
+          for: 0m
+          labels:
+            severity: warning
+            project: week13
+          annotations:
+            summary: Week13 email delivery test
+            description: >-
+              Synthetic alert verifying delivery from
+              Prometheus through Alertmanager to Mailpit.
